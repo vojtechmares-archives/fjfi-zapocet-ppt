@@ -21,3 +21,8 @@ type ServerMessage struct {
 	Message string `json:"serverMessage"`
 	kind    string `json:"kind"`
 }
+
+// AuthenticationData for handling WS authentication, we do not want anyone unauthorized talking to our server
+type AuthenticationData struct {
+	Token string `json:"authentication-token"`
+}

@@ -19,7 +19,6 @@ var chMsgs = make(chan Message)
 var chCmds = make(chan Command)
 
 func handleConnections(w http.ResponseWriter, r *http.Request) {
-
 	if r.URL.Scheme != "ws://" || r.URL.Scheme != "wss://" {
 		upgrade := r.Header.Get("Upgrade")
 		connection := r.Header.Get("Connection")
@@ -43,15 +42,26 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	for {
 		var msg Message
 		var cmd Command
+		var auth AuthenticationData
 
-		err := ws.ReadJSON(&msg)
-		if err != nil {
+		msgErr := ws.ReadJSON(&msg)
+		if msgErr != nil {
 			cmdErr := ws.ReadJSON(&cmd)
 			if cmdErr != nil {
-				log.Printf("message error: %v, command error: %v", err, cmdErr)
+				authErr := ws.ReadJSON(&auth)
+				if authErr != nil {
+					log.Printf("message error: %v, command error: %v, auth error: %v", msgErr, cmdErr, authErr)
 
-				delete(clients, id)
-				break
+					delete(clients, id)
+					break
+				}
+
+				// jwt handle authentication
+				// auth process:
+				// 1. send request to REST API to authenticate, before connecting to websocket
+				// 2. with authentication token, connect to WS and send 'authentication message', containing the token
+				// 3. WS server validates token and if valid, adds client to client pool, if not, just close the connection right away with 'Unauthorized' reply
+
 			}
 
 			cmd.SenderID = id
@@ -60,6 +70,8 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 		msg.SenderID = id
 		chMsgs <- msg
+
+		serverMessageToClient(client, ServerMessage{Message: "Waiting for an authentication", kind: "info"})
 	}
 }
 
@@ -111,6 +123,8 @@ func handleCommands() {
 		cmd := <-chCmds
 
 		switch cmd.Command {
+		case "authenticate":
+			break
 		case "setName":
 			for _, client := range clients {
 
